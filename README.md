@@ -1,0 +1,2 @@
+# BDC-SESSION-METHOD
+BDC PROGRAM USING SESSION METHOD using 'FI01' and  'XK01' TO create bank,vendor.
