@@ -1,0 +1,138 @@
+PARAMETER PFILE TYPE IBIPPARMS-PATH.
+DATA FFILE TYPE STRING.
+DATA:   BDCDATA LIKE BDCDATA    OCCURS 0 WITH HEADER LINE.
+*include bdcrecx1.
+TYPES : BEGIN OF TY,
+        ROW(200) TYPE C,
+        END OF TY.
+DATA : WA TYPE TY,IT TYPE TABLE OF TY.
+TYPES : BEGIN OF TY_FI01,
+        BANKS TYPE BNKA-BANKS,
+        BANKL TYPE BNKA-BANKL,
+        BANKA TYPE BNKA-BANKA,
+        PROVZ TYPE BNKA-PROVZ,
+        STRAS TYPE BNKA-STRAS,
+        ORT01 TYPE BNKA-ORT01,
+        BRNCH TYPE BNKA-BRNCH,
+        END OF TY_FI01.
+DATA : WA_FI01 TYPE TY_FI01,
+       IT_FI01 TYPE TABLE OF TY_FI01.
+TYPES : BEGIN OF TY_XD01,
+        LIFNR TYPE RF02K-LIFNR,
+        KTOKK TYPE RF02K-KTOKK,
+        NAME1 TYPE LFA1-NAME1,
+        SORTL TYPE LFA1-SORTL,
+        STRAS TYPE LFA1-STRAS,
+        ORT01 TYPE LFA1-ORT01,
+        LAND1 TYPE LFA1-LAND1,
+        END OF TY_XD01.
+DATA : WA_XD01 TYPE TY_XD01,
+       IT_XD01 TYPE TABLE OF TY_XD01.
+DATA : V1(1),V2(1) TYPE C.
+AT SELECTION-SCREEN ON VALUE-REQUEST FOR PFILE.
+CALL FUNCTION 'F4_FILENAME'
+ IMPORTING
+   FILE_NAME    = PFILE.
+start-of-selection.
+FFILE = PFILE.
+CALL FUNCTION 'GUI_UPLOAD'
+  EXPORTING
+    FILENAME                      = FFILE
+    HAS_FIELD_SEPARATOR           = 'X'
+  TABLES
+    DATA_TAB                      = IT.
+LOOP AT IT INTO WA.
+IF WA-ROW+0(1) = 'B'.
+SPLIT WA-ROW AT ',' INTO V1 WA_FI01-BANKS WA_FI01-BANKL WA_FI01-BANKA WA_FI01-PROVZ WA_FI01-STRAS WA_FI01-ORT01 WA_FI01-BRNCH.
+APPEND WA_FI01 TO IT_FI01.
+ELSEIF WA-ROW+0(1) = 'V'.
+SPLIT WA-ROW AT ',' INTO V2 WA_XD01-LIFNR WA_XD01-KTOKK WA_XD01-NAME1 WA_XD01-SORTL WA_XD01-STRAS WA_XD01-ORT01 WA_XD01-LAND1.
+APPEND WA_XD01 TO IT_XD01.
+ENDIF.
+ENDLOOP.
+CALL FUNCTION 'BDC_OPEN_GROUP'
+ EXPORTING
+   GROUP                     = 'YGCBDC1'
+*   HOLDDATE                  = FILLER8
+   KEEP                      = 'X'
+   USER                      = SY-UNAME.
+LOOP AT IT_FI01 INTO WA_FI01.
+*BANK DETAILS.
+perform bdc_dynpro      using 'SAPMF02B' '0100'.
+perform bdc_field       using 'BDC_CURSOR'
+                              'BNKA-BANKL'.
+perform bdc_field       using 'BDC_OKCODE'
+                              '/00'.
+perform bdc_field       using 'BNKA-BANKS'
+                               WA_FI01-BANKS.
+perform bdc_field       using 'BNKA-BANKL'
+                               WA_FI01-BANKL.
+perform bdc_dynpro      using 'SAPMF02B' '0110'.
+perform bdc_field       using 'BDC_CURSOR'
+                              'BNKA-BRNCH'.
+perform bdc_field       using 'BDC_OKCODE'
+                              '=UPDA'.
+perform bdc_field       using 'BNKA-BANKA'
+                               WA_FI01-BANKA.
+perform bdc_field       using 'BNKA-PROVZ'
+                               WA_FI01-PROVZ.
+perform bdc_field       using 'BNKA-STRAS'
+                               WA_FI01-STRAS.
+perform bdc_field       using 'BNKA-ORT01'
+                               WA_FI01-ORT01.
+perform bdc_field       using 'BNKA-BRNCH'
+                               WA_FI01-BRNCH.
+CALL FUNCTION 'BDC_INSERT'
+ EXPORTING
+   TCODE      = 'FI01'
+  TABLES
+    DYNPROTAB = BDCDATA.
+CLEAR BDCDATA[].
+ENDLOOP.
+LOOP AT IT_XD01 INTO WA_XD01.
+*VENDOR DETAILS
+perform bdc_dynpro      using 'SAPMF02K' '0100'.
+perform bdc_field       using 'BDC_CURSOR'
+                              'RF02K-LIFNR'.
+perform bdc_field       using 'BDC_OKCODE'
+                              '/00'.
+perform bdc_field       using 'RF02K-LIFNR'
+                               WA_XD01-LIFNR.
+perform bdc_field       using 'RF02K-KTOKK'
+                               WA_XD01-KTOKK.
+perform bdc_dynpro      using 'SAPMF02K' '0110'.
+perform bdc_field       using 'BDC_CURSOR'
+                              'LFA1-ORT01'.
+perform bdc_field       using 'BDC_OKCODE'
+                              '=UPDA'.
+perform bdc_field       using 'LFA1-NAME1'
+                               WA_XD01-NAME1.
+perform bdc_field       using 'LFA1-SORTL'
+                               WA_XD01-SORTL.
+perform bdc_field       using 'LFA1-STRAS'
+                               WA_XD01-STRAS.
+perform bdc_field       using 'LFA1-ORT01'
+                               WA_XD01-ORT01.
+perform bdc_field       using 'LFA1-LAND1'
+                               WA_XD01-LAND1.
+CALL FUNCTION 'BDC_INSERT'
+ EXPORTING
+   TCODE                  = 'XK01'
+  TABLES
+    DYNPROTAB              = BDCDATA.
+CLEAR BDCDATA[].
+ENDLOOP.
+CALL FUNCTION 'BDC_CLOSE_GROUP'.
+FORM BDC_DYNPRO USING PROGRAM DYNPRO.
+  CLEAR BDCDATA.
+  BDCDATA-PROGRAM  = PROGRAM.
+  BDCDATA-DYNPRO   = DYNPRO.
+  BDCDATA-DYNBEGIN = 'X'.
+  APPEND BDCDATA.
+ENDFORM.
+FORM BDC_FIELD USING FNAM FVAL.
+    CLEAR BDCDATA.
+    BDCDATA-FNAM = FNAM.
+    BDCDATA-FVAL = FVAL.
+    APPEND BDCDATA.
+ENDFORM.
